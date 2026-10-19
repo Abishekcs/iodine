@@ -252,6 +252,29 @@ end
 
 
 #############
+## Event loop utilization convenience over the raw Perf counters
+
+module Iodine
+  module Perf
+    # Rolling ELU since the last call - the graph-friendly convenience.
+    # Long in-flight waits land in the next sample: sample at >=1s intervals.
+    @last_sample = nil
+    def self.event_loop_utilization(reset: false)
+      idle, elapsed = idle_time_ns, elapsed_ns
+      return nil if idle.nil?
+      if reset || @last_sample.nil?
+        @last_sample = [idle, elapsed]
+        return 0.0
+      end
+      diff_idle = idle - @last_sample[0]
+      diff_elapsed = elapsed - @last_sample[1]
+      @last_sample = [idle, elapsed]
+      diff_elapsed > 0 ? (1.0 - diff_idle.to_f / diff_elapsed) : nil
+    end
+  end
+end
+
+#############
 ## At end of loading
 
 ### Load configuration filer
