@@ -256,19 +256,23 @@ end
 
 module Iodine
   module Perf
-    # Rolling ELU since the last call - the graph-friendly convenience.
-    # Long in-flight waits land in the next sample: sample at >=1s intervals.
-    @last_sample = nil
-    def self.event_loop_utilization(reset: false)
+    # Rolling ELU over the window since the previous call for `key` - the
+    # graph-friendly convenience. State is per-key, so two independent
+    # samplers (say, a monitor and a collector) never corrupt each other's
+    # windows. Long in-flight waits land in the next sample: sample at
+    # >=1s intervals.
+    @last_samples = {}
+    def self.event_loop_utilization(key: :default, reset: false)
       idle, elapsed = idle_time_ns, elapsed_ns
       return nil if idle.nil?
-      if reset || @last_sample.nil?
-        @last_sample = [idle, elapsed]
+      if reset || !@last_samples.key?(key)
+        @last_samples[key] = [idle, elapsed]
         return 0.0
       end
-      diff_idle = idle - @last_sample[0]
-      diff_elapsed = elapsed - @last_sample[1]
-      @last_sample = [idle, elapsed]
+      last = @last_samples[key]
+      diff_idle = idle - last[0]
+      diff_elapsed = elapsed - last[1]
+      @last_samples[key] = [idle, elapsed]
       diff_elapsed > 0 ? (1.0 - diff_idle.to_f / diff_elapsed) : nil
     end
   end
